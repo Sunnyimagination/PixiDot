@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dot-to-Dot Drawing Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        #controls {
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 10px;
+            justify-content: center;
+            width: 100%;
+            max-width: 1200px;
+        }
+        #size-setting, #dot-setting, #image-setting, #numbering, #export-setting {
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
+            min-width: 200px;
+            max-width: 250px;
+            overflow: hidden;
+        }
+        #size-setting h3, #dot-setting h3, #image-setting h3, #numbering h3, #export-setting h3 {
+            margin: 0 0 5px 0;
+            font-size: 1.2em;
+            color: #333;
+        }
+        #size-setting button, #dot-setting button, #image-setting button, #numbering button, #export-setting button {
+            padding: 5px 10px;
+            font-size: 1em;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #fff;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        #size-setting button:hover, #dot-setting button:hover, #image-setting button:hover, #numbering button:hover, #export-setting button:hover {
+            background-color: #f0f0f0;
+        }
+        #size-setting button:active, #dot-setting button:active, #image-setting button:active, #numbering button:active, #export-setting button:active {
+            background-color: #d0d0d0;
+            transform: scale(0.95);
+        }
+        label {
+            font-size: 1em;
+            color: #555;
+            white-space: nowrap;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        input[type="number"], input[type="range"], input[type="file"], input[type="text"] {
+            padding: 5px;
+            margin-left: 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1em;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        input[type="file"], input[type="text"] {
+            width: 100%;
+        }
+        select {
+            padding: 5px;
+            font-size: 1em;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        #canvas {
+            border: 2px solid #333;
+            position: relative;
+            overflow: hidden;
+            transform-origin: top left;
+            background-color: #fff;
+            border-radius: 5px;
+        }
+        #background-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            z-index: -1;
+            transform-origin: top left;
+        }
+        #inner-frame {
+            position: absolute;
+            top: 0.45in;
+            left: 0.45in;
+            border: 1px dashed #888;
+            pointer-events: none;
+        }
+        .dot {
+            position: absolute;
+            background-color: black;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: all;
+        }
+        .dot-number {
+            position: absolute;
+            color: black;
+            font-family: Arial, sans-serif;
+            transform: translate(-50%, -50%);
+            pointer-events: all;
+            display: none;
+        }
+        .endpoint {
+            background-color: red;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div id="size-setting">
+            <h3>Canvas Settings</h3>
+            <label>Width (in): <input type="number" id="width" value="8.33" min="1" step="0.1"></label>
+            <label>Height (in): <input type="number" id="height" value="6.25" min="1" step="0.1"></label>
+            <label>Canvas Zoom: <input type="range" id="zoom" min="0.5" max="2" step="0.1" value="1" oninput="updateZoom()"></label>
+            <button onclick="updateCanvas()">Apply</button>
+        </div>
+        <div id="dot-setting">
+            <h3>Dot Settings</h3>
+            <label>Dot Size (px): <input type="number" id="dotSize" value="4" min="1"></label>
+            <label>Line Thick. (px): <input type="number" id="lineWidth" value="1" min="1"></label>
+            <label>Dot Spacing (px): <input type="number" id="dotSpace" value="50" min="1"></label>
+            <button id="lockBtn" onclick="toggleLock()">Lock Dots</button>
+            <button onclick="resetCanvas()">Reset</button>
+            <button onclick="undo()">Undo</button>
+            <button onclick="redo()">Redo</button>
+            <button id="toggleLinesBtn" onclick="toggleLines()">Hide Lines</button>
+            <button id="endBtn" onclick="endChain()">End Chain</button>
+            <button id="connectDotBtn" onclick="toggleConnectDot()">Connect Dots</button>
+        </div>
+        <div id="image-setting">
+            <h3>Image Settings</h3>
+            <label>Upload Image: <input type="file" id="imageInput" accept="image/*" onchange="insertImage()"></label>
+            <label>Image Zoom: <input type="range" id="imageZoom" min="0.5" max="2" step="0.1" value="1" oninput="updateImageZoom()" disabled></label>
+            <label>Opacity: <input type="range" id="opacity" min="0" max="1" step="0.1" value="1" oninput="updateOpacity()" disabled></label>
+            <button id="activeImageBtn" onclick="toggleActiveImage()" disabled>Activate</button>
+            <button id="deleteImageBtn" onclick="deleteImage()" disabled>Remove</button>
+        </div>
+        <div id="numbering">
+            <h3>Numbering Settings</h3>
+            <button id="proceedNumberBtn" onclick="proceedToNumber()">Start Numbering</button>
+            <button id="toggleNumbersBtn" onclick="toggleNumbers()" disabled>Show Numbers</button>
+            <button id="activeNumberBtn" onclick="toggleActiveNumber()" disabled>Edit Numbers</button>
+            <button id="clearNumberBtn" onclick="clearNumbers()" disabled>Clear Numbers</button>
+            <label>Font Size (px): <input type="number" id="numberSize" value="12" min="1" disabled onchange="updateNumberStyle()"></label>
+            <label>Opacity: <input type="range" id="numberOpacity" min="0" max="1" step="0.1" value="1" disabled oninput="updateNumberStyle()"></label>
+        </div>
+        <div id="export-setting">
+            <h3>Export Settings</h3>
+            <label>File Name:
+                <input type="text" id="fileName" value="dot_to_dot">
+            </label>
+            <label>Format:
+                <select id="exportFormat">
+                    <option value="svg">SVG</option>
+                    <option value="png">PNG</option>
+                    <option value="jpg">JPG</option>
+                </select>
+            </label>
+            <button onclick="exportFile()">Export</button>
+        </div>
+    </div>
+    <div id="canvas">
+        <img id="background-image" style="display: none;">
+        <div id="inner-frame"></div>
+        <svg id="lines" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></svg>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const innerFrame = document.getElementById('inner-frame');
+        const linesSvg = document.getElementById('lines');
+        const backgroundImage = document.getElementById('background-image');
+        const opacitySlider = document.getElementById('opacity');
+        const imageZoomSlider = document.getElementById('imageZoom');
+        const activeImageBtn = document.getElementById('activeImageBtn');
+        const deleteImageBtn = document.getElementById('deleteImageBtn');
+        const proceedNumberBtn = document.getElementById('proceedNumberBtn');
+        const toggleNumbersBtn = document.getElementById('toggleNumbersBtn');
+        const activeNumberBtn = document.getElementById('activeNumberBtn');
+        const clearNumberBtn = document.getElementById('clearNumberBtn');
+        const endBtn = document.getElementById('endBtn');
+        const connectDotBtn = document.getElementById('connectDotBtn');
+        const numberSizeInput = document.getElementById('numberSize');
+        const numberOpacitySlider = document.getElementById('numberOpacity');
+        const fileNameInput = document.getElementById('fileName');
+        const exportFormatSelect = document.getElementById('exportFormat');
+        const DPI = 96; // Default DPI for screen
+        const EXPORT_DPI = 300; // DPI for export
+        let width = 8.33 * DPI, height = 6.25 * DPI, dotSize = 4, lineWidth = 1, dotSpace = 50;
+        let dots = [];
+        let history = [];
+        let redoStack = [];
+        let isLocked = false;
+        let isDragging = false;
+        let draggedDot = null;
+        let lastDotPos = null;
+        let linesVisible = true;
+        let zoomLevel = 1;
+        let imageZoomLevel = 1;
+        let isImageActive = false;
+        let imageDragging = false;
+        let imageOffsetX = 0, imageOffsetY = 0;
+        let numbersVisible = false;
+        let numbersAssigned = false;
+        let isNumberActive = false;
+        let draggedNumber = null;
+        let isConnectDotActive = false;
+        let firstDot = null;
+        let awaitingStartSelection = false;
+        let connections = [];
+
+        function updateCanvas() {
+            const widthInch = parseFloat(document.getElementById('width').value);
+            const heightInch = parseFloat(document.getElementById('height').value);
+            width = widthInch * DPI;
+            height = heightInch * DPI;
+            dotSize = parseInt(document.getElementById('dotSize').value);
+            lineWidth = parseInt(document.getElementById('lineWidth').value);
+            dotSpace = parseInt(document.getElementById('dotSpace').value);
+
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+            innerFrame.style.width = (width - 0.9 * DPI) + 'px';
+            innerFrame.style.height = (height - 0.9 * DPI) + 'px';
+            updateZoom();
+            updateNumberPositions();
+            updateLines();
+        }
+
+        function updateZoom() {
+            zoomLevel = parseFloat(document.getElementById('zoom').value);
+            canvas.style.transform = `scale(${zoomLevel})`;
+            updateImageZoom();
+            updateLines();
+            updateNumberPositions();
+        }
+
+        function updateImageZoom() {
+            imageZoomLevel = parseFloat(document.getElementById('imageZoom').value);
+            const totalZoom = zoomLevel * imageZoomLevel;
+            backgroundImage.style.transform = `scale(${totalZoom}) translate(${imageOffsetX}px, ${imageOffsetY}px)`;
+        }
+
+        function insertImage() {
+            const file = document.getElementById('imageInput').files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    backgroundImage.src = e.target.result;
+                    backgroundImage.style.display = 'block';
+                    opacitySlider.disabled = false;
+                    imageZoomSlider.disabled = false;
+                    activeImageBtn.disabled = false;
+                    deleteImageBtn.disabled = false;
+                    updateOpacity();
+                    updateImageZoom();
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function updateOpacity() {
+            backgroundImage.style.opacity = opacitySlider.value;
+        }
+
+        function deleteImage() {
+            backgroundImage.style.display = 'none';
+            backgroundImage.src = '';
+            opacitySlider.disabled = true;
+            imageZoomSlider.disabled = true;
+            activeImageBtn.disabled = true;
+            deleteImageBtn.disabled = true;
+            opacitySlider.value = 1;
+            imageZoomSlider.value = 1;
+            imageZoomLevel = 1;
+            imageOffsetX = 0;
+            imageOffsetY = 0;
+            isImageActive = false;
+            activeImageBtn.textContent = 'Activate';
+            updateImageZoom();
+        }
+
+        function toggleActiveImage() {
+            isImageActive = !isImageActive;
+            activeImageBtn.textContent = isImageActive ? 'Deactivate' : 'Activate';
+        }
+
+        function assignNumbers(startDot) {
+            dots.forEach(dot => {
+                dot.number = null;
+                if (dot.numberElement) {
+                    dot.numberElement.textContent = '';
+                    dot.element.classList.remove('endpoint');
+                }
+            });
+
+            const endpoints = dots.filter(dot => !dot.prev && dot.next || dot.prev && !dot.next || !dot.prev && !dot.next);
+            console.log("Endpoints found:", endpoints.map(d => ({ x: d.x, y: d.y, index: dots.indexOf(d), prev: d.prev ? dots.indexOf(d.prev) : null, next: d.next ? dots.indexOf(d.next) : null })));
+
+            if (endpoints.length < 2) {
+                console.warn("Invalid chain: Requires at least 2 endpoints, currently has", endpoints.length);
+                return;
+            }
+
+            let allConnections = new Map();
+            dots.forEach((dot, index) => allConnections.set(index, []));
+            dots.forEach((dot, index) => {
+                if (dot.next) allConnections.get(index).push(dots.indexOf(dot.next));
+                if (dot.prev) allConnections.get(index).push(dots.indexOf(dot.prev));
+                connections.forEach(conn => {
+                    if (conn.dot1 === dot) allConnections.get(index).push(dots.indexOf(conn.dot2));
+                    if (conn.dot2 === dot) allConnections.get(index).push(dots.indexOf(conn.dot1));
+                });
+            });
+
+            let number = 1;
+            let visited = new Set();
+            let stack = [dots.indexOf(startDot)];
+
+            console.log("Starting DFS from:", { x: startDot.x, y: startDot.y, index: dots.indexOf(startDot), prev: startDot.prev ? dots.indexOf(startDot.prev) : null, next: startDot.next ? dots.indexOf(startDot.next) : null });
+
+            while (stack.length > 0) {
+                const currentIndex = stack.pop();
+                const currentDot = dots[currentIndex];
+                if (visited.has(currentIndex)) continue;
+
+                visited.add(currentIndex);
+                currentDot.number = number++;
+                if (currentDot.numberElement) {
+                    currentDot.numberElement.textContent = currentDot.number;
+                }
+
+                allConnections.get(currentIndex).forEach(nextIndex => {
+                    if (!visited.has(nextIndex)) {
+                        stack.push(nextIndex);
+                        console.log("Pushed next/prev:", { x: dots[nextIndex].x, y: dots[nextIndex].y, index: nextIndex, prev: dots[nextIndex].prev ? dots.indexOf(dots[nextIndex].prev) : null, next: dots[nextIndex].next ? dots.indexOf(dots[nextIndex].next) : null });
+                    }
+                });
+
+                console.log("Visited:", { x: currentDot.x, y: currentDot.y, index: currentIndex, number: currentDot.number, prev: currentDot.prev ? dots.indexOf(currentDot.prev) : null, next: currentDot.next ? dots.indexOf(currentDot.next) : null });
+            }
+
+            const unnumberedDots = dots.filter(dot => !dot.number);
+            if (unnumberedDots.length > 0) {
+                console.warn("Unnumbered dots:", unnumberedDots.map(d => ({ x: d.x, y: d.y, index: dots.indexOf(d), prev: d.prev ? dots.indexOf(d.prev) : null, next: d.next ? dots.indexOf(d.next) : null })));
+            }
+
+            console.log("Assigned numbers:", dots.map(d => ({ x: d.x, y: d.y, number: d.number, index: dots.indexOf(d), prev: d.prev ? dots.indexOf(d.prev) : null, next: d.next ? dots.indexOf(d.next) : null })));
+        }
+
+        function proceedToNumber() {
+            if (!numbersAssigned) {
+                dots.forEach(dot => {
+                    const number = document.createElement('div');
+                    number.className = 'dot-number';
+                    number.style.left = dot.x + 'px';
+                    number.style.top = (dot.y - dotSize - 5) + 'px';
+                    canvas.appendChild(number);
+                    dot.numberElement = number;
+                    dot.numberX = dot.x;
+                    dot.numberY = dot.y - dotSize - 5;
+                });
+                numbersAssigned = true;
+                toggleNumbersBtn.disabled = false;
+                activeNumberBtn.disabled = false;
+                clearNumberBtn.disabled = false;
+                numberSizeInput.disabled = false;
+                numberOpacitySlider.disabled = false;
+                toggleNumbers();
+            }
+
+            const endpoints = dots.filter(dot => !dot.prev && dot.next || dot.prev && !dot.next || !dot.prev && !dot.next);
+            console.log("Endpoints found:", endpoints.map(d => ({ x: d.x, y: d.y, index: dots.indexOf(d), prev: d.prev ? dots.indexOf(d.prev) : null, next: d.next ? dots.indexOf(d.next) : null })));
+
+            if (endpoints.length < 2) {
+                alert("The chain must have at least 2 endpoints to number! Currently has " + endpoints.length + " endpoints.");
+                return;
+            }
+
+            endpoints.forEach((dot, index) => {
+                dot.numberElement.textContent = `Click to start (${index + 1})`;
+                dot.element.classList.add('endpoint');
+                dot.numberElement.style.display = 'block';
+            });
+
+            awaitingStartSelection = true;
+            proceedNumberBtn.disabled = true;
+        }
+
+        function selectStartDot(e) {
+            if (!awaitingStartSelection) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / zoomLevel;
+            const y = (e.clientY - rect.top) / zoomLevel;
+
+            const clickedDot = dots.find(dot => 
+                dot.numberElement && 
+                Math.abs(dot.numberX - x) < 20 && 
+                Math.abs(dot.numberY - y) < 20 &&
+                (!dot.prev && dot.next || dot.prev && !dot.next || !dot.prev && !dot.next)
+            );
+
+            if (clickedDot) {
+                assignNumbers(clickedDot);
+                awaitingStartSelection = false;
+                proceedNumberBtn.disabled = false;
+                dots.forEach(dot => dot.element.classList.remove('endpoint'));
+            }
+        }
+
+        function toggleNumbers() {
+            if (!numbersAssigned) return;
+            numbersVisible = !numbersVisible;
+            toggleNumbersBtn.textContent = numbersVisible ? 'Hide Numbers' : 'Show Numbers';
+            dots.forEach(dot => {
+                if (dot.numberElement) {
+                    dot.numberElement.style.display = numbersVisible && !awaitingStartSelection ? 'block' : 'none';
+                }
+            });
+            if (awaitingStartSelection) {
+                const endpoints = dots.filter(dot => !dot.prev && dot.next || dot.prev && !dot.next || !dot.prev && !dot.next);
+                endpoints.forEach(dot => dot.numberElement.style.display = 'block');
+            }
+        }
+
+        function toggleActiveNumber() {
+            isNumberActive = !isNumberActive;
+            activeNumberBtn.textContent = isNumberActive ? 'Disable Editing' : 'Edit Numbers';
+            dots.forEach(dot => {
+                if (dot.numberElement) {
+                    dot.numberElement.style.pointerEvents = isNumberActive ? 'all' : 'none';
+                }
+            });
+        }
+
+        function clearNumbers() {
+            if (!numbersAssigned) return;
+            dots.forEach(dot => {
+                if (dot.numberElement) {
+                    canvas.removeChild(dot.numberElement);
+                    dot.numberElement = null;
+                    dot.number = null;
+                    dot.element.classList.remove('endpoint');
+                }
+            });
+            numbersAssigned = false;
+            numbersVisible = false;
+            awaitingStartSelection = false;
+            toggleNumbersBtn.disabled = true;
+            activeNumberBtn.disabled = true;
+            clearNumberBtn.disabled = true;
+            numberSizeInput.disabled = true;
+            numberOpacitySlider.disabled = true;
+            toggleNumbersBtn.textContent = 'Show Numbers';
+            activeNumberBtn.textContent = 'Edit Numbers';
+            proceedNumberBtn.disabled = false;
+        }
+
+        function updateNumberStyle() {
+            const size = parseInt(numberSizeInput.value);
+            const opacity = parseFloat(numberOpacitySlider.value);
+            dots.forEach(dot => {
+                if (dot.numberElement) {
+                    dot.numberElement.style.fontSize = size + 'px';
+                    dot.numberElement.style.opacity = opacity;
+                }
+            });
+        }
+
+        function updateNumberPositions() {
+            dots.forEach(dot => {
+                if (dot.numberElement) {
+                    dot.numberElement.style.left = dot.numberX + 'px';
+                    dot.numberElement.style.top = dot.numberY + 'px';
+                }
+            });
+        }
+
+        function toggleLock() {
+            isLocked = !isLocked;
+            document.getElementById('lockBtn').textContent = isLocked ? 'Unlock Dots' : 'Lock Dots';
+        }
+
+        function endChain() {
+            if (dots.length > 0) {
+                dots[dots.length - 1].end = true;
+                dots[dots.length - 1].next = null;
+            }
+        }
+
+        function toggleConnectDot() {
+            isConnectDotActive = !isConnectDotActive;
+            connectDotBtn.textContent = isConnectDotActive ? 'Disable Connect' : 'Connect Dots';
+            firstDot = null;
+        }
+
+        function addDot(x, y, fromHistory = false) {
+            const dot = document.createElement('div');
+            dot.className = 'dot';
+            dot.style.width = dotSize + 'px';
+            dot.style.height = dotSize + 'px';
+            dot.style.left = x + 'px';
+            dot.style.top = y + 'px';
+            canvas.appendChild(dot);
+            const dotData = { element: dot, x, y, end: false, next: null, prev: null };
+            dots.push(dotData);
+            if (!fromHistory) {
+                history.push({ action: 'add', dot: dotData });
+                redoStack = [];
+            }
+            if (dots.length > 1 && linesVisible && !dots[dots.length - 2].end) {
+                drawLine(dots[dots.length - 2], dots[dots.length - 1]);
+                dots[dots.length - 2].next = dots[dots.length - 1];
+                dots[dots.length - 1].prev = dots[dots.length - 2];
+            }
+            dot.addEventListener('mousedown', (e) => startDragging(e, dot));
+            if (numbersAssigned) {
+                const number = document.createElement('div');
+                number.className = 'dot-number';
+                number.style.left = x + 'px';
+                number.style.top = (y - dotSize - 5) + 'px';
+                number.style.display = numbersVisible ? 'block' : 'none';
+                number.style.pointerEvents = isNumberActive ? 'all' : 'none';
+                canvas.appendChild(number);
+                dotData.numberElement = number;
+                dotData.numberX = x;
+                dotData.numberY = y - dotSize - 5;
+            }
+            lastDotPos = { x, y };
+        }
+
+        function drawLine(dot1, dot2) {
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', dot1.x);
+            line.setAttribute('y1', dot1.y);
+            line.setAttribute('x2', dot2.x);
+            line.setAttribute('y2', dot2.y);
+            line.setAttribute('stroke', 'black');
+            line.setAttribute('stroke-width', lineWidth);
+            line.setAttribute('data-connection', `${dots.indexOf(dot1)}-${dots.indexOf(dot2)}`);
+            linesSvg.appendChild(line);
+        }
+
+        function updateLines() {
+            linesSvg.innerHTML = '';
+            if (linesVisible) {
+                dots.forEach(dot => {
+                    if (dot.next && !dot.end) {
+                        drawLine(dot, dot.next);
+                    }
+                });
+                connections.forEach(conn => {
+                    drawLine(conn.dot1, conn.dot2);
+                });
+            }
+        }
+
+        function resetCanvas() {
+            dots.forEach(dot => {
+                canvas.removeChild(dot.element);
+                if (dot.numberElement) canvas.removeChild(dot.numberElement);
+            });
+            dots = [];
+            history = [];
+            redoStack = [];
+            connections = [];
+            linesSvg.innerHTML = '';
+            lastDotPos = null;
+            isLocked = false;
+            isConnectDotActive = false;
+            document.getElementById('lockBtn').textContent = 'Lock Dots';
+            document.getElementById('zoom').value = 1;
+            endBtn.textContent = 'End Chain';
+            connectDotBtn.textContent = 'Connect Dots';
+            deleteImage();
+            numbersAssigned = false;
+            numbersVisible = false;
+            isNumberActive = false;
+            awaitingStartSelection = false;
+            toggleNumbersBtn.disabled = true;
+            activeNumberBtn.disabled = true;
+            clearNumberBtn.disabled = true;
+            numberSizeInput.disabled = true;
+            numberOpacitySlider.disabled = true;
+            toggleNumbersBtn.textContent = 'Show Numbers';
+            activeNumberBtn.textContent = 'Edit Numbers';
+            proceedNumberBtn.disabled = false;
+            updateZoom();
+        }
+
+        function undo() {
+            if (history.length === 0) return;
+            const lastAction = history.pop();
+            if (lastAction.action === 'add') {
+                const dotIndex = dots.findIndex(d => d === lastAction.dot);
+                if (dotIndex !== -1) {
+                    const dot = dots[dotIndex];
+                    canvas.removeChild(dot.element);
+                    if (dot.numberElement) {
+                        canvas.removeChild(dot.numberElement);
+                    }
+                    if (dot.prev) dot.prev.next = null;
+                    if (dot.next) dot.next.prev = null;
+                    dots.splice(dotIndex, 1);
+                    redoStack.push(lastAction);
+                    updateLines();
+                    if (numbersAssigned) assignNumbers();
+                }
+            }
+            lastDotPos = dots.length > 0 ? { x: dots[dots.length - 1].x, y: dots[dots.length - 1].y } : null;
+        }
+
+        function redo() {
+            if (redoStack.length === 0) return;
+            const lastRedo = redoStack.pop();
+            if (lastRedo.action === 'add') {
+                addDot(lastRedo.dot.x, lastRedo.dot.y, true);
+                history.push(lastRedo);
+            }
+        }
+
+        function toggleLines() {
+            linesVisible = !linesVisible;
+            document.getElementById('toggleLinesBtn').textContent = linesVisible ? 'Hide Lines' : 'Show Lines';
+            updateLines();
+        }
+
+        function startDragging(e, dot) {
+            if (isImageActive || isNumberActive || isConnectDotActive || awaitingStartSelection) return;
+            e.preventDefault();
+            isDragging = true;
+            draggedDot = dots.find(d => d.element === dot);
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stopDragging);
+        }
+
+        function drag(e) {
+            if (!isDragging) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / zoomLevel;
+            const y = (e.clientY - rect.top) / zoomLevel;
+            draggedDot.x = Math.max(0, Math.min(x, width));
+            draggedDot.y = Math.max(0, Math.min(y, height));
+            draggedDot.element.style.left = draggedDot.x + 'px';
+            draggedDot.element.style.top = draggedDot.y + 'px';
+            if (draggedDot.numberElement) {
+                draggedDot.numberElement.style.left = draggedDot.numberX + 'px';
+                draggedDot.numberElement.style.top = draggedDot.numberY + 'px';
+            }
+            updateLines();
+        }
+
+        function stopDragging() {
+            isDragging = false;
+            draggedDot = null;
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', stopDragging);
+        }
+
+        function startImageDragging(e) {
+            if (!isImageActive || backgroundImage.style.display === 'none') return;
+            e.preventDefault();
+            imageDragging = true;
+            const rect = canvas.getBoundingClientRect();
+            const startX = e.clientX / zoomLevel;
+            const startY = e.clientY / zoomLevel;
+            const offsetStartX = imageOffsetX;
+            const offsetStartY = imageOffsetY;
+
+            function moveImage(e) {
+                const newX = e.clientX / zoomLevel;
+                const newY = e.clientY / zoomLevel;
+                imageOffsetX = offsetStartX + (newX - startX);
+                imageOffsetY = offsetStartY + (newY - startY);
+                updateImageZoom();
+            }
+
+            function stopImageDragging() {
+                imageDragging = false;
+                document.removeEventListener('mousemove', moveImage);
+                document.removeEventListener('mouseup', stopImageDragging);
+            }
+
+            document.addEventListener('mousemove', moveImage);
+            document.addEventListener('mouseup', stopImageDragging);
+        }
+
+        function startNumberDragging(e, dot) {
+            if (!isNumberActive || !dot.numberElement || awaitingStartSelection) return;
+            e.preventDefault();
+            e.stopPropagation();
+            draggedNumber = dot;
+            const rect = canvas.getBoundingClientRect();
+            const startX = e.clientX / zoomLevel;
+            const startY = e.clientY / zoomLevel;
+            const offsetStartX = dot.numberX;
+            const offsetStartY = dot.numberY;
+
+            function moveNumber(e) {
+                const newX = e.clientX / zoomLevel;
+                const newY = e.clientY / zoomLevel;
+                draggedNumber.numberX = offsetStartX + (newX - startX);
+                draggedNumber.numberY = offsetStartY + (newY - startY);
+                draggedNumber.numberElement.style.left = draggedNumber.numberX + 'px';
+                draggedNumber.numberElement.style.top = draggedNumber.numberY + 'px';
+            }
+
+            function stopNumberDragging() {
+                draggedNumber = null;
+                document.removeEventListener('mousemove', moveNumber);
+                document.removeEventListener('mouseup', stopNumberDragging);
+            }
+
+            document.addEventListener('mousemove', moveNumber);
+            document.addEventListener('mouseup', stopNumberDragging);
+        }
+
+        function connectDots(dot1, dot2) {
+            console.log("Before connect:", {
+                dot1: { x: dot1.x, y: dot1.y, index: dots.indexOf(dot1), prev: dot1.prev ? dots.indexOf(dot1.prev) : null, next: dot1.next ? dots.indexOf(dot1.next) : null, end: dot1.end },
+                dot2: { x: dot2.x, y: dot2.y, index: dots.indexOf(dot2), prev: dot2.prev ? dots.indexOf(dot2.prev) : null, next: dot2.next ? dots.indexOf(dot2.next) : null, end: dot2.end }
+            });
+
+            if ((dot1.prev && !dot1.next) || (!dot1.prev && dot1.next) || (!dot1.prev && !dot1.next)) {
+                if ((dot2.prev && !dot2.next) || (!dot2.prev && dot2.next) || (!dot2.prev && !dot2.next)) {
+                    connections.push({ dot1, dot2 });
+                    if (linesVisible) {
+                        drawLine(dot1, dot2);
+                    }
+                }
+            }
+
+            console.log("After connect:", {
+                dot1: { x: dot1.x, y: dot1.y, index: dots.indexOf(dot1), prev: dot1.prev ? dots.indexOf(dot1.prev) : null, next: dot1.next ? dots.indexOf(dot1.next) : null, end: dot1.end },
+                dot2: { x: dot2.x, y: dot2.y, index: dots.indexOf(dot2), prev: dot2.prev ? dots.indexOf(dot2.prev) : null, next: dot2.next ? dots.indexOf(dot2.next) : null, end: dot2.end }
+            });
+
+            if (numbersAssigned) {
+                assignNumbers(dots.find(d => !d.prev && d.next) || dots[0]);
+            }
+
+            updateLines();
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / zoomLevel;
+            const y = (e.clientY - rect.top) / zoomLevel;
+
+            if (awaitingStartSelection) {
+                selectStartDot(e);
+            } else if (isImageActive) {
+                startImageDragging(e);
+            } else if (isNumberActive) {
+                const dot = dots.find(d => d.numberElement && Math.abs(d.numberX - x) < 20 && Math.abs(d.numberY - y) < 20);
+                if (dot) {
+                    startNumberDragging(e, dot);
+                }
+            } else if (isConnectDotActive) {
+                const clickedDot = dots.find(d => Math.abs(d.x - x) < 10 && Math.abs(d.y - y) < 10);
+                if (clickedDot) {
+                    if (!firstDot) {
+                        firstDot = clickedDot;
+                    } else if (firstDot !== clickedDot) {
+                        connectDots(firstDot, clickedDot);
+                        firstDot = null;
+                    }
+                }
+            } else if (!isLocked && !isDragging) {
+                if (x < 0.45 * DPI || y < 0.45 * DPI || x > width - 0.45 * DPI || y > height - 0.45 * DPI) return;
+                addDot(x, y);
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isLocked || isImageActive || isNumberActive || isConnectDotActive || awaitingStartSelection || !e.buttons || e.buttons !== 1) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / zoomLevel;
+            const y = (e.clientY - rect.top) / zoomLevel;
+            if (x < 0.45 * DPI || y < 0.45 * DPI || x > width - 0.45 * DPI || y > height - 0.45 * DPI) return;
+            if (!lastDotPos) return;
+            const distance = Math.sqrt((x - lastDotPos.x) ** 2 + (y - lastDotPos.y) ** 2);
+            if (distance >= dotSpace) {
+                addDot(x, y);
+            }
+        });
+
+        function exportFile() {
+            const fileName = fileNameInput.value.trim() || 'dot_to_dot';
+            const format = exportFormatSelect.value;
+            const scaleFactor = EXPORT_DPI / DPI;
+
+            const exportCanvas = document.createElement('canvas');
+            const ctx = exportCanvas.getContext('2d');
+            const exportWidth = width * scaleFactor;
+            const exportHeight = height * scaleFactor;
+            exportCanvas.width = exportWidth;
+            exportCanvas.height = exportHeight;
+
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, exportWidth, exportHeight);
+
+            function finalizeExport() {
+                if (format === 'svg') {
+                    exportSVG(fileName);
+                } else {
+                    exportImage(exportCanvas, fileName, format);
+                }
+            }
+
+            if (backgroundImage.style.display !== 'none') {
+                const img = new Image();
+                img.crossOrigin = "Anonymous"; // Để tránh lỗi CORS nếu hình từ nguồn khác
+                img.src = backgroundImage.src;
+                img.onload = () => {
+                    const imgWidth = img.width * scaleFactor * imageZoomLevel;
+                    const imgHeight = img.height * scaleFactor * imageZoomLevel;
+                    const imgX = imageOffsetX * scaleFactor;
+                    const imgY = imageOffsetY * scaleFactor;
+                    ctx.globalAlpha = opacitySlider.value;
+                    ctx.drawImage(img, imgX, imgY, imgWidth, imgHeight);
+                    ctx.globalAlpha = 1;
+                    drawExportContent(ctx, scaleFactor);
+                    finalizeExport();
+                };
+                img.onerror = () => {
+                    console.error("Failed to load background image for export.");
+                    drawExportContent(ctx, scaleFactor);
+                    finalizeExport();
+                };
+            } else {
+                drawExportContent(ctx, scaleFactor);
+                finalizeExport();
+            }
+        }
+
+        function drawExportContent(ctx, scaleFactor) {
+            if (linesVisible) {
+                ctx.lineWidth = lineWidth * scaleFactor;
+                ctx.strokeStyle = 'black';
+                dots.forEach(dot => {
+                    if (dot.next && !dot.end) {
+                        ctx.beginPath();
+                        ctx.moveTo(dot.x * scaleFactor, dot.y * scaleFactor);
+                        ctx.lineTo(dot.next.x * scaleFactor, dot.next.y * scaleFactor);
+                        ctx.stroke();
+                    }
+                });
+                connections.forEach(conn => {
+                    ctx.beginPath();
+                    ctx.moveTo(conn.dot1.x * scaleFactor, conn.dot1.y * scaleFactor);
+                    ctx.lineTo(conn.dot2.x * scaleFactor, conn.dot2.y * scaleFactor);
+                    ctx.stroke();
+                });
+            }
+
+            dots.forEach(dot => {
+                ctx.beginPath();
+                ctx.arc(dot.x * scaleFactor, dot.y * scaleFactor, dotSize * scaleFactor / 2, 0, Math.PI * 2);
+                ctx.fillStyle = dot.element.classList.contains('endpoint') ? 'red' : 'black';
+                ctx.fill();
+            });
+
+            if (numbersVisible && numbersAssigned) {
+                ctx.font = `${parseInt(numberSizeInput.value) * scaleFactor}px Arial`;
+                ctx.fillStyle = `rgba(0, 0, 0, ${numberOpacitySlider.value})`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                dots.forEach(dot => {
+                    if (dot.number) {
+                        ctx.fillText(dot.number, dot.numberX * scaleFactor, dot.numberY * scaleFactor);
+                    }
+                });
+            }
+        }
+
+        function exportSVG(fileName) {
+            const scaleFactor = EXPORT_DPI / DPI;
+            const svgContent = `
+                <svg width="${width * scaleFactor}" height="${height * scaleFactor}" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="100%" height="100%" fill="white"/>
+                    ${backgroundImage.style.display !== 'none' ? 
+                        `<image href="${backgroundImage.src}" x="${imageOffsetX * scaleFactor}" y="${imageOffsetY * scaleFactor}" width="${backgroundImage.width * scaleFactor * imageZoomLevel}" height="${backgroundImage.height * scaleFactor * imageZoomLevel}" opacity="${opacitySlider.value}"/>` 
+                        : ''}
+                    ${linesVisible ? dots.map(dot => dot.next && !dot.end ? 
+                        `<line x1="${dot.x * scaleFactor}" y1="${dot.y * scaleFactor}" x2="${dot.next.x * scaleFactor}" y2="${dot.next.y * scaleFactor}" stroke="black" stroke-width="${lineWidth * scaleFactor}"/>` 
+                        : '').join('') : ''}
+                    ${linesVisible ? connections.map(conn => 
+                        `<line x1="${conn.dot1.x * scaleFactor}" y1="${conn.dot1.y * scaleFactor}" x2="${conn.dot2.x * scaleFactor}" y2="${conn.dot2.y * scaleFactor}" stroke="black" stroke-width="${lineWidth * scaleFactor}"/>`).join('') : ''}
+                    ${dots.map(dot => 
+                        `<circle cx="${dot.x * scaleFactor}" cy="${dot.y * scaleFactor}" r="${dotSize * scaleFactor / 2}" fill="${dot.element.classList.contains('endpoint') ? 'red' : 'black'}"/>`).join('')}
+                    ${numbersVisible && numbersAssigned ? dots.map(dot => dot.number ? 
+                        `<text x="${dot.numberX * scaleFactor}" y="${dot.numberY * scaleFactor}" font-size="${parseInt(numberSizeInput.value) * scaleFactor}px" fill="black" opacity="${numberOpacitySlider.value}" text-anchor="middle" dominant-baseline="middle">${dot.number}</text>` 
+                        : '').join('') : ''}
+                </svg>
+            `;
+            const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${fileName}.svg`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function exportImage(canvas, fileName, format) {
+            canvas.toBlob(function(blob) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${fileName}.${format}`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }, `image/${format}`, 1.0);
+        }
+
+        updateCanvas();
+    </script>
+</body>
+</html>
